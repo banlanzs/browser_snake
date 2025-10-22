@@ -78,6 +78,63 @@ a {
   border-radius: 3px;
 }
 
+/* 添加可视化网格样式 */
+#visual-grid-container {
+  margin-top: 10px;
+}
+
+#visual-grid {
+  background: #f0f0f0;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1;
+  overflow-x: auto;
+}
+
+#toggle-visual-grid {
+  margin-top: 5px;
+  padding: 5px 10px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+#toggle-visual-grid:hover {
+  background: #0056b3;
+}
+
+/* 添加暂停按钮样式 */
+#pause-container {
+  margin: 10px 0;
+}
+
+#toggle-pause {
+  padding: 5px 10px;
+  background: #ffc107;
+  color: #000;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#toggle-pause:hover {
+  background: #e0a800;
+}
+
+#toggle-pause.paused {
+  background: #28a745;
+  color: white;
+}
+
+#toggle-pause.paused:hover {
+  background: #218838;
+}
+
 #share {
   display: inline-block;
 }
@@ -140,6 +197,11 @@ footer {
 
 .high-score-toggle {
   color: #ff8c0b;
+}
+
+/* 添加历史得分切换按钮样式 */
+.score-history-toggle {
+  color: #00cc66;
 }
 
 .collapse-btn {

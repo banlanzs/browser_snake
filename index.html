@@ -17,6 +17,16 @@
 </head>
 <noscript>⚠ Sorry, this game requires JavaScript.</noscript>
 <div id=url-container class=invisible>URL: <span id=url></span></div>
+<!-- 添加可视化网格显示区域 -->
+<div id=visual-grid-container class=invisible>
+  <h3>Visual Grid (for better visibility):</h3>
+  <pre id=visual-grid></pre>
+  <button id=toggle-visual-grid>Hide Visual Grid</button>
+</div>
+<!-- 添加暂停按钮 -->
+<div id=pause-container>
+  <button id=toggle-pause>Pause</button>
+</div>
 <div class=expandable>
   <button class="help-toggle expand-btn" aria-label=Help>?</button>
   <div class="expandable-content hidden">
@@ -30,6 +40,15 @@
   <div class="expandable-content hidden">
     Your highest score is <span id=max-score-points></span>!
     <span id=max-score-grid></span><a id=share href=#><i class=icon-share></i>Share</a>&nbsp;<button class=collapse-btn aria-label=Hide>〈</button><span id=share-note class=invisible></span>
+  </div>
+</div>
+<!-- 添加历史得分显示区域 -->
+<div id=score-history-container class="expandable hidden">
+  <button class="score-history-toggle expand-btn" aria-label="Score history">H</button>
+  <div class="expandable-content hidden">
+    <h3>Score History</h3>
+    <ul id=score-history-list></ul>
+    <button class=collapse-btn aria-label=Hide>〈</button>
   </div>
 </div>
 <div class="controls touch-only">

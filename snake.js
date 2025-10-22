@@ -2,6 +2,7 @@
 
 var GRID_WIDTH = 40;
 var SNAKE_CELL = 1;
+var SNAKE_HEAD_CELL = 3; // 新增蛇头单元格类型
 var FOOD_CELL = 2;
 var UP = {x: 0, y: -1};
 var DOWN = {x: 0, y: 1};
@@ -19,11 +20,23 @@ var gamePaused = false;
 var urlRevealed = false;
 var whitespaceReplacementChar;
 
+// 快速移动和加速功能相关变量
+var lastKeyDownTime = 0;
+var keyDownTimer = null;
+var isRightKeyDown = false;
+var isLeftKeyDown = false;
+var isUpKeyDown = false;
+var isDownKeyDown = false;
+var isAccelerating = false;
+var accelerationFactor = 1; // 加速因子，1为正常速度，2为两倍速
+var fastMoveTriggered = false; // 防止快速移动重复触发
+
 function main() {
   detectBrowserUrlWhitespaceEscaping();
   cleanUrl();
   setupEventHandlers();
   drawMaxScore();
+  drawScoreHistory(); // 添加这一行来显示历史得分
   initUrlRevealed();
   startGame();
 
@@ -71,17 +84,47 @@ function setupEventHandlers() {
   document.onkeydown = function (event) {
     var key = event.keyCode;
     if (key in directionsByKey) {
-      changeDirection(directionsByKey[key]);
+      // 特殊处理方向键快速移动和加速
+      if ((key === 39 || key === 68 || key === 76) && directionsByKey[key] === RIGHT) {
+        handleDirectionKeyDown(RIGHT, 'right');
+      } else if ((key === 37 || key === 65 || key === 72) && directionsByKey[key] === LEFT) {
+        handleDirectionKeyDown(LEFT, 'left');
+      } else if ((key === 38 || key === 87 || key === 75) && directionsByKey[key] === UP) {
+        handleDirectionKeyDown(UP, 'up');
+      } else if ((key === 40 || key === 83 || key === 74) && directionsByKey[key] === DOWN) {
+        handleDirectionKeyDown(DOWN, 'down');
+      } else {
+        changeDirection(directionsByKey[key]);
+      }
+      event.preventDefault();
+    }
+  };
+
+  document.onkeyup = function (event) {
+    var key = event.keyCode;
+    if (key === 39 || key === 68 || key === 76) {
+      handleDirectionKeyUp('right');
+    } else if (key === 37 || key === 65 || key === 72) {
+      handleDirectionKeyUp('left');
+    } else if (key === 38 || key === 87 || key === 75) {
+      handleDirectionKeyUp('up');
+    } else if (key === 40 || key === 83 || key === 74) {
+      handleDirectionKeyUp('down');
     }
   };
 
   // Use touchstart instead of mousedown because these arrows are only shown on
   // touch devices, and also because there is a delay between touchstart and
   // mousedown on those devices, and the game should respond ASAP.
-  $('#up').ontouchstart = function () { changeDirection(UP) };
-  $('#down').ontouchstart = function () { changeDirection(DOWN) };
-  $('#left').ontouchstart = function () { changeDirection(LEFT) };
-  $('#right').ontouchstart = function () { changeDirection(RIGHT) };
+  $('#up').ontouchstart = function () { handleDirectionKeyDown(UP, 'up') };
+  $('#down').ontouchstart = function () { handleDirectionKeyDown(DOWN, 'down') };
+  $('#left').ontouchstart = function () { handleDirectionKeyDown(LEFT, 'left') };
+  $('#right').ontouchstart = function () { handleDirectionKeyDown(RIGHT, 'right') };
+  
+  $('#up').ontouchend = function () { handleDirectionKeyUp('up') };
+  $('#down').ontouchend = function () { handleDirectionKeyUp('down') };
+  $('#left').ontouchend = function () { handleDirectionKeyUp('left') };
+  $('#right').ontouchend = function () { handleDirectionKeyUp('right') };
 
   window.onblur = function pauseGame() {
     gamePaused = true;
@@ -96,6 +139,24 @@ function setupEventHandlers() {
   $('#reveal-url').onclick = function (e) {
     e.preventDefault();
     setUrlRevealed(!urlRevealed);
+  };
+
+  // 添加可视化网格切换按钮事件处理
+  $('#toggle-visual-grid').onclick = function () {
+    var visualGridContainer = $('#visual-grid-container');
+    var button = $('#toggle-visual-grid');
+    if (visualGridContainer.classList.contains('invisible')) {
+      visualGridContainer.classList.remove('invisible');
+      button.textContent = 'Hide Visual Grid';
+    } else {
+      visualGridContainer.classList.add('invisible');
+      button.textContent = 'Show Visual Grid';
+    }
+  };
+
+  // 添加暂停按钮事件处理
+  $('#toggle-pause').onclick = function () {
+    togglePause();
   };
 
   document.querySelectorAll('.expandable').forEach(function (expandable) {
@@ -116,6 +177,28 @@ function setupEventHandlers() {
       content.classList.toggle('hidden', !expanded);
     };
   });
+  
+  // 添加历史得分容器的事件处理
+  var scoreHistoryContainer = $('#score-history-container');
+  if (scoreHistoryContainer) {
+    var expand = scoreHistoryContainer.querySelector('.expand-btn');
+    var collapse = scoreHistoryContainer.querySelector('.collapse-btn');
+    var content = scoreHistoryContainer.querySelector('.expandable-content');
+    
+    if (expand && collapse && content) {
+      expand.onclick = collapse.onclick = function () {
+        expand.classList.remove('hidden');
+        content.classList.remove('hidden');
+        scoreHistoryContainer.classList.toggle('expanded');
+      };
+      
+      scoreHistoryContainer.ontransitionend = function () {
+        var expanded = scoreHistoryContainer.classList.contains('expanded');
+        expand.classList.toggle('hidden', expanded);
+        content.classList.toggle('hidden', !expanded);
+      };
+    }
+  }
 }
 
 function initUrlRevealed() {
@@ -143,6 +226,8 @@ function startGame() {
     snake.unshift({x: x, y: y});
     setCellAt(x, y, SNAKE_CELL);
   }
+  // 设置蛇头
+  setCellAt(snake[0].x, snake[0].y, SNAKE_HEAD_CELL);
   currentDirection = RIGHT;
   moveQueue = [];
   hasMoved = false;
@@ -176,7 +261,10 @@ function updateWorld() {
   }
 
   // Advance head after tail so it can occupy the same cell on next tick.
-  setCellAt(newX, newY, SNAKE_CELL);
+  // 先清除旧的蛇头标记
+  setCellAt(head.x, head.y, SNAKE_CELL);
+  // 设置新的蛇头位置
+  setCellAt(newX, newY, SNAKE_HEAD_CELL);
   snake.unshift({x: newX, y: newY});
 
   if (eatsFood) {
@@ -193,15 +281,76 @@ function endGame() {
     drawMaxScore();
     showMaxScore();
   }
+  
+  // 保存历史得分
+  saveScoreToHistory(score);
+}
+
+// 保存得分到历史记录
+function saveScoreToHistory(score) {
+  // 获取现有的历史得分数组或创建一个空数组
+  var scoreHistory = JSON.parse(localStorage.scoreHistory || '[]');
+  
+  // 添加新的得分记录（包含时间戳）
+  scoreHistory.unshift({
+    score: score,
+    timestamp: new Date().toISOString()
+  });
+  
+  // 只保留最近10条记录
+  if (scoreHistory.length > 10) {
+    scoreHistory = scoreHistory.slice(0, 10);
+  }
+  
+  // 保存到localStorage
+  localStorage.scoreHistory = JSON.stringify(scoreHistory);
+  
+  // 更新历史得分显示
+  drawScoreHistory();
+}
+
+// 绘制历史得分
+function drawScoreHistory() {
+  var scoreHistory = JSON.parse(localStorage.scoreHistory || '[]');
+  if (scoreHistory.length === 0) {
+    return;
+  }
+  
+  var scoreHistoryList = $('#score-history-list');
+  scoreHistoryList.innerHTML = '';
+  
+  // 添加历史得分列表项
+  scoreHistory.forEach(function(record, index) {
+    var listItem = document.createElement('li');
+    var scoreText = record.score == 1 ? '1 point' : record.score + ' points';
+    var date = new Date(record.timestamp);
+    var dateString = date.toLocaleString();
+    
+    listItem.textContent = (index === 0 ? '[Latest] ' : '') + scoreText + ' - ' + dateString;
+    scoreHistoryList.appendChild(listItem);
+  });
+  
+  // 显示历史得分容器
+  $('#score-history-container').classList.remove('hidden');
 }
 
 function drawWorld() {
   var hash = '#|' + gridString() + '|[score:' + currentScore() + ']';
 
+  // 更新可视化网格显示
+  var visualGrid = '';
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < GRID_WIDTH; x++) {
+      visualGrid += charAt(x, y);
+    }
+    if (y < 3) visualGrid += '\n';
+  }
+  $('#visual-grid').textContent = visualGrid;
+
   if (urlRevealed) {
     // Use the original game representation on the on-DOM view, as there are no
     // escaping issues there.
-    $('#url').textContent = location.href.replace(/#.*$/, '') + hash;
+    $('#url').textContent = location.href.replace(/#.*$/, '') + hash + '\n' + visualGrid;
   }
 
   // Modern browsers escape whitespace characters on the address bar URL for
@@ -247,11 +396,41 @@ function gridString() {
   return str;
 }
 
+// 获取指定位置的位值，用于Braille字符渲染
+function bitAt(x, y) {
+  var cell = cellAt(x, y);
+  // 蛇身和蛇头都显示为点，食物也显示为点
+  return cell ? 1 : 0;
+}
+
+// 获取指定位置的字符，用于在DOM中显示（带箭头的蛇头）
+function charAt(x, y) {
+  var cell = cellAt(x, y);
+  if (cell === SNAKE_HEAD_CELL) {
+    // 根据当前方向返回相应的箭头字符
+    if (currentDirection === UP) return '↑';
+    if (currentDirection === DOWN) return '↓';
+    if (currentDirection === LEFT) return '←';
+    if (currentDirection === RIGHT) return '→';
+    return '●'; // 默认圆形
+  }
+  if (cell === SNAKE_CELL) {
+    return '●'; // 蛇身用圆点表示
+  }
+  if (cell === FOOD_CELL) {
+    return '●'; // 食物用圆点表示
+  }
+  return ' '; // 空白
+}
+
+// 重写tickTime函数以支持加速
 function tickTime() {
   // Game speed increases as snake grows.
   var start = 125;
   var end = 75;
-  return start + snake.length * (end - start) / grid.length;
+  var normalTime = start + snake.length * (end - start) / grid.length;
+  // 应用加速因子
+  return normalTime / accelerationFactor;
 }
 
 function currentScore() {
@@ -260,10 +439,6 @@ function currentScore() {
 
 function cellAt(x, y) {
   return grid[x % GRID_WIDTH + y * GRID_WIDTH];
-}
-
-function bitAt(x, y) {
-  return cellAt(x, y) ? 1 : 0;
 }
 
 function setCellAt(x, y, cellType) {
@@ -296,6 +471,96 @@ function changeDirection(newDir) {
     moveQueue.unshift(newDir);
   }
   hasMoved = true;
+}
+
+// 处理方向键按下事件（快速移动和加速）
+function handleDirectionKeyDown(direction, directionName) {
+  var now = Date.now();
+  
+  // 设置对应方向键的状态
+  if (directionName === 'right') isRightKeyDown = true;
+  if (directionName === 'left') isLeftKeyDown = true;
+  if (directionName === 'up') isUpKeyDown = true;
+  if (directionName === 'down') isDownKeyDown = true;
+  
+  // 检查是否为快速点击（300ms内）
+  if (now - lastKeyDownTime < 300 && !fastMoveTriggered) {
+    // 快速点击，执行快速移动
+    fastMoveTriggered = true;
+    // 快速移动3格
+    for (var i = 0; i < 3; i++) {
+      changeDirection(direction);
+    }
+    // 重置快速移动触发标志
+    setTimeout(function() {
+      fastMoveTriggered = false;
+    }, 300);
+  } else if (now - lastKeyDownTime >= 300) {
+    // 正常点击，开始计时检测长按
+    fastMoveTriggered = false;
+    changeDirection(direction);
+    
+    // 清除之前的计时器
+    if (keyDownTimer) {
+      clearTimeout(keyDownTimer);
+    }
+    
+    // 设置长按检测计时器
+    keyDownTimer = setTimeout(function() {
+      // 检查是否仍有方向键被按下
+      if (isRightKeyDown || isLeftKeyDown || isUpKeyDown || isDownKeyDown) {
+        // 长按，启动加速模式
+        isAccelerating = true;
+        accelerationFactor = 2; // 两倍速
+      }
+    }, 500); // 500ms后检测为长按
+  }
+  
+  lastKeyDownTime = now;
+}
+
+// 处理方向键释放事件
+function handleDirectionKeyUp(directionName) {
+  // 重置对应方向键的状态
+  if (directionName === 'right') isRightKeyDown = false;
+  if (directionName === 'left') isLeftKeyDown = false;
+  if (directionName === 'up') isUpKeyDown = false;
+  if (directionName === 'down') isDownKeyDown = false;
+  
+  if (keyDownTimer) {
+    clearTimeout(keyDownTimer);
+    keyDownTimer = null;
+  }
+  
+  // 如果所有方向键都已释放，取消加速
+  if (!isRightKeyDown && !isLeftKeyDown && !isUpKeyDown && !isDownKeyDown) {
+    if (isAccelerating) {
+      isAccelerating = false;
+      accelerationFactor = 1; // 恢复正常速度
+    }
+  }
+}
+
+// 暂停/继续游戏
+function togglePause() {
+  gamePaused = !gamePaused;
+  var pauseButton = $('#toggle-pause');
+  
+  if (gamePaused) {
+    pauseButton.textContent = 'Resume';
+    pauseButton.classList.add('paused');
+    // 在URL中添加暂停标记
+    window.history.replaceState(null, null, location.hash + '[paused]');
+  } else {
+    pauseButton.textContent = 'Pause';
+    pauseButton.classList.remove('paused');
+    // 移除URL中的暂停标记
+    var hash = location.hash.replace('[paused]', '');
+    window.history.replaceState(null, null, hash);
+  }
+  
+  // 更新可视化网格显示
+  drawWorld();
 }
 
 function drawMaxScore() {
