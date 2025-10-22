@@ -38,7 +38,7 @@ python -m http.server 8000 --bind localhost
 ```
 
 ## ⚠️ **Attention!!!** ⚠️
-<span style="color:red; font-weight:bold;">会产生大量历史记录，造成Boom！</span>
+<span style="color:red; font-weight:bold;">会产生大量历史记录，造成Boom！请在无痕模式下使用</span>
 
 ## 浏览器兼容性
 
