@@ -232,6 +232,9 @@ function startGame() {
   moveQueue = [];
   hasMoved = false;
   dropFood();
+  
+  // 立即更新URL以反映新游戏开始
+  immediateUpdateUrl('#|' + gridString() + '|[score:0]');
 }
 
 function updateWorld() {
@@ -284,6 +287,9 @@ function endGame() {
   
   // 保存历史得分
   saveScoreToHistory(score);
+  
+  // 立即更新URL以反映游戏结束状态
+  immediateUpdateUrl('#|' + gridString() + '|[score:' + score + ']');
 }
 
 // 保存得分到历史记录
@@ -353,25 +359,57 @@ function drawWorld() {
     $('#url').textContent = location.href.replace(/#.*$/, '') + hash + '\n' + visualGrid;
   }
 
-  // Modern browsers escape whitespace characters on the address bar URL for
+  // Modern browsers don't escape whitespace characters on the address bar URL for
   // security reasons. In case this browser does that, replace the empty Braille
   // character with a non-whitespace (and hopefully non-intrusive) symbol.
   if (whitespaceReplacementChar) {
     hash = hash.replace(/\u2800/g, whitespaceReplacementChar);
   }
 
-  history.replaceState(null, null, hash);
+  // 使用防抖动机制来限制URL更新频率，避免产生过多的历史记录
+  debouncedUpdateUrl(hash);
+}
 
-  // Some browsers have a rate limit on history.replaceState() calls, resulting
-  // in the URL not updating at all for a couple of seconds. In those cases,
-  // location.hash is updated directly, which is unfortunate, as it causes a new
-  // navigation entry to be created each time, effectively hijacking the user's
-  // back button.
-  if (decodeURIComponent(location.hash) !== hash) {
-    console.warn(
-      'history.replaceState() throttling detected. Using location.hash fallback'
-    );
-    location.hash = hash;
+// 防抖动函数，限制URL更新频率
+var urlUpdateTimeout;
+function debouncedUpdateUrl(hash) {
+  // 清除之前的定时器
+  if (urlUpdateTimeout) {
+    clearTimeout(urlUpdateTimeout);
+  }
+  
+  // 设置新的定时器，延迟更新URL
+  urlUpdateTimeout = setTimeout(function() {
+    try {
+      history.replaceState(null, null, hash);
+    } catch (e) {
+      console.warn('Failed to update URL with history.replaceState:', e);
+      // 如果history.replaceState失败，则尝试使用location.hash
+      // 但在设置前检查是否与当前hash相同，避免不必要的历史记录
+      if (decodeURIComponent(location.hash) !== hash) {
+        location.hash = hash;
+      }
+    }
+  }, 50); // 50ms的延迟应该足够防止过于频繁的更新
+}
+
+// 立即更新URL的函数，用于游戏状态改变时（如游戏结束）
+function immediateUpdateUrl(hash) {
+  // 清除任何待处理的防抖动更新
+  if (urlUpdateTimeout) {
+    clearTimeout(urlUpdateTimeout);
+    urlUpdateTimeout = null;
+  }
+  
+  try {
+    history.replaceState(null, null, hash);
+  } catch (e) {
+    console.warn('Failed to update URL with history.replaceState:', e);
+    // 如果history.replaceState失败，则尝试使用location.hash
+    // 但在设置前检查是否与当前hash相同，避免不必要的历史记录
+    if (decodeURIComponent(location.hash) !== hash) {
+      location.hash = hash;
+    }
   }
 }
 
@@ -549,14 +587,14 @@ function togglePause() {
   if (gamePaused) {
     pauseButton.textContent = 'Resume';
     pauseButton.classList.add('paused');
-    // 在URL中添加暂停标记
-    window.history.replaceState(null, null, location.hash + '[paused]');
+    // 立即更新URL以反映暂停状态
+    immediateUpdateUrl(location.hash + '[paused]');
   } else {
     pauseButton.textContent = 'Pause';
     pauseButton.classList.remove('paused');
-    // 移除URL中的暂停标记
-    var hash = location.hash.replace('[paused]', '');
-    window.history.replaceState(null, null, hash);
+    // 立即更新URL以移除暂停标记
+    var hash = '#|' + gridString() + '|[score:' + currentScore() + ']';
+    immediateUpdateUrl(hash);
   }
   
   // 更新可视化网格显示
