@@ -37,6 +37,9 @@ This is how the game should look:
 python -m http.server 8000 --bind localhost
 ```
 
+## ⚠️ **Attention!!!** ⚠️
+<span style="color:red; font-weight:bold;">会产生大量历史记录，造成Boom！</span>
+
 ## 浏览器兼容性
 
 Note that the game might be unplayable on some browsers for different reasons, like the browser not showing the full URL, or not allowing it to change so frequently, or escaping the Braille characters used to display the game.
